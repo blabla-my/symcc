@@ -15,13 +15,18 @@
 #ifndef PASS_H
 #define PASS_H
 
+#include <cstddef>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
+#include <llvm/Support/CommandLine.h>
 
 #if LLVM_VERSION_MAJOR >= 13
 #include <llvm/IR/PassManager.h>
 #endif
+
+#include <string>
+
 
 class SymbolizeLegacyPass : public llvm::FunctionPass {
 public:

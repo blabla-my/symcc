@@ -46,8 +46,17 @@ using namespace llvm;
 #endif
 
 char SymbolizeLegacyPass::ID = 0;
-
+cl::opt<std::string> SymccPassArg("ignore-source", cl::desc("source file to skip instrumentation"), cl::init(""));
 namespace {
+
+bool isIgnored(const Module &M){
+  if(!SymccPassArg.empty()) {
+    if (M.getName().find(SymccPassArg) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
 
 static constexpr char kSymCtorName[] = "__sym_ctor";
 
@@ -160,6 +169,9 @@ void liftInlineAssembly(CallInst *CI) {
 }
 
 bool instrumentFunction(Function &F) {
+  if (isIgnored(*F.getParent())){
+    return false;
+  }
   auto functionName = F.getName();
   if (functionName == kSymCtorName)
     return false;
