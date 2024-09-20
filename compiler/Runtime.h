@@ -30,6 +30,9 @@ struct Runtime {
 
   SymFnT buildInteger{};
   SymFnT buildInteger128{};
+  SymFnT buildInteger128FromVector;
+  SymFnT buildInteger256FromVector;
+  SymFnT buildInteger512FromVector;
   SymFnT buildFloat{};
   SymFnT buildNullPointer{};
   SymFnT buildTrue{};

@@ -52,7 +52,7 @@ namespace {
 static constexpr char kSymCtorName[] = "__sym_ctor";
 
 bool instrumentModule(Module &M) {
-  DEBUG(errs() << "Symbolizer module instrumentation\n");
+  // DEBUG(errs() << "Symbolizer module instrumentation\n");
 
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
@@ -164,8 +164,8 @@ bool instrumentFunction(Function &F) {
   if (functionName == kSymCtorName)
     return false;
 
-  DEBUG(errs() << "Symbolizing function ");
-  DEBUG(errs().write_escaped(functionName) << '\n');
+  // DEBUG(errs() << "Symbolizing function ");
+  // DEBUG(errs().write_escaped(functionName) << '\n');
 
   SmallVector<Instruction *, 0> allInstructions;
   allInstructions.reserve(F.getInstructionCount());
@@ -203,6 +203,7 @@ bool instrumentFunction(Function &F) {
   assert(!verifyFunction(F, &errs()) &&
          "SymbolizePass produced invalid bitcode");
 
+  // errs() << "Symbolized function " << functionName << "\n";
   return true;
 }
 

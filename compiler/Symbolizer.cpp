@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
@@ -673,6 +674,10 @@ void Symbolizer::visitBitCastInst(BitCastInst &I) {
     return;
   }
 
+  if (I.getSrcTy()->isIntOrIntVectorTy() or I.getDestTy()->isIntOrIntVectorTy()){
+    return;
+  }
+
   assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
          "Unhandled non-pointer bit cast");
   if (auto *expr = getSymbolicExpression(I.getOperand(0)))
@@ -796,6 +801,10 @@ void Symbolizer::visitCastInst(CastInst &I) {
   // bit-vector sort, so trying to cast one into a bit vector of any length
   // raises an error. The run-time library provides a dedicated conversion
   // function for this case.
+  if (I.getSrcTy()->isVectorTy()){
+    errs() << "Vector meet!!!!!!!!  " << I << "\n";
+    return;
+  }
   if (I.getSrcTy()->getIntegerBitWidth() == 1) {
 
     SymbolicComputation symbolicComputation;
@@ -972,6 +981,47 @@ Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
     }
   }
 
+  if (valueType->isIntOrIntVectorTy() && valueType->isVectorTy() && !valueType->isIntegerTy()){
+    if (auto vecType = dyn_cast<FixedVectorType>(valueType)) {
+      auto bitSize = vecType->getPrimitiveSizeInBits();
+      errs() << "Vector bit size: " << bitSize << "\n";
+      auto resizedVec = IRB.CreateBitCast(V,FixedVectorType::get(IRB.getInt64Ty(), bitSize/64));
+      if (bitSize == 128){
+        errs() << "128 bit vector\n";
+        std::vector<Value*> args;
+        for (uint64_t i=0; i<2; i++){
+          args.push_back(IRB.CreateExtractElement(resizedVec, i));
+        }
+        return IRB.CreateCall(
+            runtime.buildInteger128FromVector,
+            args
+        );
+      }
+      if (bitSize == 256){
+        errs() << "256 bit vector\n";
+        std::vector<Value*> args;
+        for (uint64_t i=0; i<4; i++){
+          args.push_back(IRB.CreateExtractElement(resizedVec, i));
+        }
+        return IRB.CreateCall(
+            runtime.buildInteger256FromVector,
+            args
+        );
+      }
+      if (bitSize == 512){
+        errs() << "512 bit vector\n";
+        std::vector<Value*> args;
+        for (uint64_t i=0; i<8; i++){
+          args.push_back(IRB.CreateExtractElement(resizedVec, i));
+        }
+        return IRB.CreateCall(
+            runtime.buildInteger512FromVector,
+            args
+        );
+      }
+    }
+  }
+
   if (valueType->isFloatingPointTy()) {
     return IRB.CreateCall(runtime.buildFloat,
                           {IRB.CreateFPCast(V, IRB.getDoubleTy()),
@@ -1064,7 +1114,7 @@ Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
       return expr;
     }
   }
-
+  errs() << "Value type: " << *V->getType() << "," << V->getType()->isVectorTy() << "," << "\n";
   llvm_unreachable("Unhandled type for constant expression");
 }
 

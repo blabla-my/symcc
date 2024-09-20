@@ -45,6 +45,9 @@ Runtime::Runtime(Module &M) {
   buildInteger = import(M, "_sym_build_integer", ptrT, IRB.getInt64Ty(), int8T);
   buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt64Ty(),
                            IRB.getInt64Ty());
+  buildInteger128FromVector = import(M, "_sym_build_integer128_from_vector", ptrT, IRB.getInt64Ty(), IRB.getInt64Ty());
+  buildInteger256FromVector = import(M, "_sym_build_integer256_from_vector", ptrT, IRB.getInt64Ty(), IRB.getInt64Ty(), IRB.getInt64Ty(), IRB.getInt64Ty());
+  buildInteger512FromVector = import(M, "_sym_build_integer512_from_vector", ptrT, IRB.getInt64Ty(), IRB.getInt64Ty(), IRB.getInt64Ty(), IRB.getInt64Ty());
   buildFloat = import(M, "_sym_build_float", ptrT, IRB.getDoubleTy(), int1T);
   buildNullPointer = import(M, "_sym_build_null_pointer", ptrT);
   buildTrue = import(M, "_sym_build_true", ptrT);
