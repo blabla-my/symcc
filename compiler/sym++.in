@@ -55,6 +55,7 @@ if [ $# -eq 0 ]; then
 fi
 
 exec $compiler                                  \
+     -fplugin="$pass"				\
      @CLANG_LOAD_PASS@"$pass"                   \
      $stdlib_cflags                             \
      "$@"                                       \

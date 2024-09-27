@@ -24,6 +24,7 @@
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
+#include <set>
 
 #if LLVM_VERSION_MAJOR < 14
 #include <llvm/Support/TargetRegistry.h>
@@ -46,14 +47,34 @@ using namespace llvm;
 #endif
 
 char SymbolizeLegacyPass::ID = 0;
-cl::opt<std::string> SymccPassArg("ignore-source", cl::desc("source file to skip instrumentation"), cl::init(""));
+cl::opt<std::string> SymccPassArg("target-source", cl::desc("source file to instrumentation"), cl::init(""));
 namespace {
 
-bool isIgnored(const Module &M){
-  if(!SymccPassArg.empty()) {
-    if (M.getName().find(SymccPassArg) != std::string::npos) {
-      return true;
+bool isTarget(const Module &M){
+  // SymccPassArg is a string that contains several word separated by comma
+  // if the module name contains any of the word, we will instrument it
+  static std::set<std::string> targetList;
+  if (targetList.empty() and !SymccPassArg.empty()) {
+    std::string target = SymccPassArg;
+    size_t pos = 0;
+    std::string token;
+    while ((pos = target.find(',')) != std::string::npos) {
+      token = target.substr(0, pos);
+      targetList.insert(token);
+      target.erase(0, pos + 1);
     }
+    targetList.insert(target);
+  }
+  if(!SymccPassArg.empty()) {
+    for (const std::string &tar : targetList) {
+      if (M.getName().find(tar) != std::string::npos) {
+        errs() << "Target Module: " << M.getName() << " matched." << "\n";
+        return true;
+      }
+    }
+  }
+  else{
+  	return true;
   }
   return false;
 }
@@ -61,7 +82,10 @@ bool isIgnored(const Module &M){
 static constexpr char kSymCtorName[] = "__sym_ctor";
 
 bool instrumentModule(Module &M) {
-  // DEBUG(errs() << "Symbolizer module instrumentation\n");
+  if (!isTarget(M)){
+    return false;
+  }
+  DEBUG(errs() << "Symbolizer module instrumentation " << M.getName() << "\n");
 
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
@@ -169,7 +193,7 @@ void liftInlineAssembly(CallInst *CI) {
 }
 
 bool instrumentFunction(Function &F) {
-  if (isIgnored(*F.getParent())){
+  if (!isTarget(*F.getParent())){
     return false;
   }
   auto functionName = F.getName();
