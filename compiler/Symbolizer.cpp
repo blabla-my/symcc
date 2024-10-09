@@ -16,16 +16,45 @@
 
 #include <cstdint>
 #include <llvm/ADT/SmallPtrSet.h>
+#include <llvm/ADT/StringRef.h>
+#include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Runtime.h"
 
 using namespace llvm;
 
+Constant* getFilenamePointer(StringRef filename, Module *M, IRBuilder<> &IRB) {
+  static std::map<StringRef, Constant*> filename_pool;
+  if (filename_pool.find(filename) == filename_pool.end() and M != nullptr) {
+    llvm::Constant *strConstant = llvm::ConstantDataArray::getString(IRB.getContext(),filename, true);
+    llvm::ArrayType *strType = llvm::ArrayType::get(IRB.getInt8Ty(),filename.size() + 1);
+    llvm::GlobalVariable *strGlobal = new llvm::GlobalVariable(
+      *M,
+      strType,                          // Type of the global variable (array of i8s)
+      true,                             // Is constant
+      llvm::GlobalValue::PrivateLinkage, // Linkage
+      strConstant,                      // Initializer (the constant string)
+      "filename"                        // Name of the global variable
+    );
+    llvm::Constant *zero = llvm::ConstantInt::get(IRB.getInt32Ty(), 0);
+    llvm::Constant *indices[] = {zero, zero};
+    Constant* strPointer = llvm::ConstantExpr::getInBoundsGetElementPtr(strType, strGlobal, indices);
+    filename_pool[filename] = strPointer;
+  }
+  else if (M == nullptr) {
+    auto int8PtrType = IRB.getInt8PtrTy();
+    return ConstantPointerNull::get(int8PtrType);
+  }
+  return filename_pool[filename];
+}
 void Symbolizer::symbolizeFunctionArguments(Function &F) {
   // The main function doesn't receive symbolic arguments.
   if (F.getName() == "main")
@@ -439,10 +468,14 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
   // expression over from the chosen argument.
 
   IRBuilder<> IRB(&I);
+  StringRef filename = I.getDebugLoc().get()->getFilename();
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
                                        {I.getCondition(), false},
-                                       {getTargetPreferredInt(&I), false}});
+                                       {getTargetPreferredInt(&I), false},
+                                       {getFilenamePointer(filename,I.getModule(),IRB), false},
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getLine(), false), false},
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getCol(), false), false}});
   registerSymbolicComputation(runtimeCall);
   if (getSymbolicExpression(I.getTrueValue()) ||
       getSymbolicExpression(I.getFalseValue())) {
@@ -489,10 +522,14 @@ void Symbolizer::visitBranchInst(BranchInst &I) {
     return;
 
   IRBuilder<> IRB(&I);
+  StringRef filename = I.getDebugLoc().get()->getFilename();
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
                                        {I.getCondition(), false},
-                                       {getTargetPreferredInt(&I), false}});
+                                       {getTargetPreferredInt(&I), false},
+                                       {getFilenamePointer(filename, I.getModule(), IRB), false},
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getLine(), false), false},
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getCol(), false), false}});
   registerSymbolicComputation(runtimeCall);
 }
 
@@ -932,8 +969,12 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
     auto *caseConstraint = IRB.CreateCall(
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
+    StringRef filename = I.getDebugLoc().get()->getFilename();
     IRB.CreateCall(runtime.pushPathConstraint,
-                   {caseConstraint, caseTaken, getTargetPreferredInt(&I)});
+                   {caseConstraint, caseTaken, getTargetPreferredInt(&I), 
+                    getFilenamePointer(filename, I.getModule(), IRB),
+                    llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getLine(), false),
+                    llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getCol(), false)});
   }
 }
 
@@ -1146,7 +1187,10 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
                        {destExpr, concreteDestExpr});
     auto *pushAssertion = IRB.CreateCall(
         runtime.pushPathConstraint,
-        {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V)});
+        {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V), 
+         getFilenamePointer("unknown", nullptr, IRB), 
+         llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false),
+         llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false)});
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {Input(V, 0, destAssertion)}));
   }
