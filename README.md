@@ -34,7 +34,7 @@ provided Vagrant file).
 Make sure to pull the SymCC Runtime:
 
 ```
-$ git submodule update --init --recursive
+$ git submodule update --init --recursive --remote
 ```
 
 Note that it is not necessary or recommended to build the QSYM submodule - our
