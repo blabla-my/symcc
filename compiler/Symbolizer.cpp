@@ -969,12 +969,11 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
     auto *caseConstraint = IRB.CreateCall(
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
-    StringRef filename = I.getDebugLoc().get()->getFilename();
     IRB.CreateCall(runtime.pushPathConstraint,
                    {caseConstraint, caseTaken, getTargetPreferredInt(&I), 
-                    getFilenamePointer(filename, I.getModule(), IRB),
-                    llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getLine(), false),
-                    llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getCol(), false)});
+                    getFilenamePointer("switchInst", I.getModule(), IRB),
+                    llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false),
+                    llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false)});
   }
 }
 
