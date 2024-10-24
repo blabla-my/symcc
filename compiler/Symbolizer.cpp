@@ -468,14 +468,27 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
   // expression over from the chosen argument.
 
   IRBuilder<> IRB(&I);
-  StringRef filename = I.getDebugLoc().get()->getFilename();
+  
+  DILocation* dloc = I.getDebugLoc().get();
+  uint32_t ln, col;
+  StringRef filename;
+  if (dloc == nullptr) {
+    ln = 0;
+    col = 0;
+    filename = "select-inst no-dbg-info";
+  }
+  else{
+    ln = dloc->getLine();
+    col = dloc->getColumn();
+    filename = dloc->getFilename();
+  }
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
                                        {I.getCondition(), false},
                                        {getTargetPreferredInt(&I), false},
                                        {getFilenamePointer(filename,I.getModule(),IRB), false},
-                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getLine(), false), false},
-                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getCol(), false), false}});
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(),ln, false), false},
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), col, false), false}});
   registerSymbolicComputation(runtimeCall);
   if (getSymbolicExpression(I.getTrueValue()) ||
       getSymbolicExpression(I.getFalseValue())) {
@@ -522,14 +535,26 @@ void Symbolizer::visitBranchInst(BranchInst &I) {
     return;
 
   IRBuilder<> IRB(&I);
-  StringRef filename = I.getDebugLoc().get()->getFilename();
+  DILocation* dloc = I.getDebugLoc().get();
+  uint32_t ln, col;
+  StringRef filename;
+  if (dloc == nullptr) {
+    ln = 0;
+    col = 0;
+    filename = "branch-inst no-dbg-info";
+  }
+  else{
+    ln = dloc->getLine();
+    col = dloc->getColumn();
+    filename = dloc->getFilename();
+  }
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
                                        {I.getCondition(), false},
                                        {getTargetPreferredInt(&I), false},
                                        {getFilenamePointer(filename, I.getModule(), IRB), false},
-                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getLine(), false), false},
-                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), I.getDebugLoc().getCol(), false), false}});
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), ln, false), false},
+                                       {llvm::ConstantInt::get(IRB.getInt32Ty(), col, false), false}});
   registerSymbolicComputation(runtimeCall);
 }
 
@@ -956,6 +981,20 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
   if (conditionExpr == nullptr)
     return;
 
+  DILocation* dloc = I.getDebugLoc().get();
+  uint32_t ln, col;
+  StringRef filename;
+  if (dloc == nullptr) {
+    ln = 0;
+    col = 0;
+    filename = "switch-inst no-dbg-info";
+  }
+  else{
+    ln = dloc->getLine();
+    col = dloc->getColumn();
+    filename = dloc->getFilename();
+  }
+
   // Build a check whether we have a symbolic condition, to be used later.
   auto *haveSymbolicCondition = IRB.CreateICmpNE(
       conditionExpr, ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo()));
@@ -971,9 +1010,9 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
     IRB.CreateCall(runtime.pushPathConstraint,
                    {caseConstraint, caseTaken, getTargetPreferredInt(&I), 
-                    getFilenamePointer("switchInst", I.getModule(), IRB),
-                    llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false),
-                    llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false)});
+                    getFilenamePointer(filename, I.getModule(), IRB),
+                    llvm::ConstantInt::get(IRB.getInt32Ty(), ln, false),
+                    llvm::ConstantInt::get(IRB.getInt32Ty(), col, false)});
   }
 }
 
