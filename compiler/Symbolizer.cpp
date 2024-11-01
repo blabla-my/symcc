@@ -33,25 +33,14 @@ using namespace llvm;
 
 Constant* getFilenamePointer(StringRef filename, Module *M, IRBuilder<> &IRB) {
   static std::map<StringRef, Constant*> filename_pool;
-  if (filename_pool.find(filename) == filename_pool.end() and M != nullptr) {
-    llvm::Constant *strConstant = llvm::ConstantDataArray::getString(IRB.getContext(),filename, true);
-    llvm::ArrayType *strType = llvm::ArrayType::get(IRB.getInt8Ty(),filename.size() + 1);
-    llvm::GlobalVariable *strGlobal = new llvm::GlobalVariable(
-      *M,
-      strType,                          // Type of the global variable (array of i8s)
-      true,                             // Is constant
-      llvm::GlobalValue::PrivateLinkage, // Linkage
-      strConstant,                      // Initializer (the constant string)
-      "filename"                        // Name of the global variable
+  if (filename_pool.find(filename) == filename_pool.end()) {
+    llvm::Constant *strPointer = IRB.CreateGlobalStringPtr(
+      filename,
+      "filename",
+      0,
+      M                          
     );
-    llvm::Constant *zero = llvm::ConstantInt::get(IRB.getInt32Ty(), 0);
-    llvm::Constant *indices[] = {zero, zero};
-    Constant* strPointer = llvm::ConstantExpr::getInBoundsGetElementPtr(strType, strGlobal, indices);
     filename_pool[filename] = strPointer;
-  }
-  else if (M == nullptr) {
-    auto int8PtrType = IRB.getInt8PtrTy();
-    return ConstantPointerNull::get(int8PtrType);
   }
   return filename_pool[filename];
 }
@@ -1223,12 +1212,26 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
     auto *destAssertion =
         IRB.CreateCall(runtime.comparisonHandlers[CmpInst::ICMP_EQ],
                        {destExpr, concreteDestExpr});
+    
+    DILocation* dloc = IRB.getCurrentDebugLocation().get();
+    uint32_t ln, col;
+    StringRef filename;
+    if (dloc == nullptr) {
+      ln = 0;
+      col = 0;
+      filename = "tryAlternative no-dbg-info";
+    }
+    else{
+      ln = dloc->getLine();
+      col = dloc->getColumn();
+      filename = dloc->getFilename();
+    }
     auto *pushAssertion = IRB.CreateCall(
         runtime.pushPathConstraint,
         {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V), 
-         getFilenamePointer("unknown", nullptr, IRB), 
-         llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false),
-         llvm::ConstantInt::get(IRB.getInt32Ty(), 0, false)});
+         getFilenamePointer(filename, nullptr, IRB), 
+         llvm::ConstantInt::get(IRB.getInt32Ty(), ln, false),
+         llvm::ConstantInt::get(IRB.getInt32Ty(), col, false)});
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {Input(V, 0, destAssertion)}));
   }
